@@ -12,8 +12,16 @@ var name;
 var callerid;
 var password;
 
-
+//로그인
 var auth = require("./routes/auth.js");
+
+//세션
+var expressSession = require("express-session");
+app.use(expressSession({
+	secret: "key",
+	resave: true,
+	saveUninitialized: true
+});
 
 
 //npm install --save cookie-parser
@@ -21,14 +29,13 @@ const cookieParser = require("cookie-parser");
 
 //npm install --save body-parser
 const bodyParser = require("body-parser");
+app.use(bodyParser.json());
 
 //npm install --save pbkfd2-password
 const hasher = require("pbkfd2-password").bkfd2Password();
 
-	
 
 
-app.use(bodyParser.json());
 
 
 http.createServer(app).listen(app.get('port'), function() {
@@ -36,12 +43,7 @@ http.createServer(app).listen(app.get('port'), function() {
 
 });
 
-router.route("/").get(function(req,res) {
-	res.redirect("/main");
-});
 
-
-router.route("/main").get(function(req,res) {
 
 
 
@@ -50,6 +52,7 @@ app.use("/auth", auth);
 
 
 app.all("*", function(req,res) {
+	//TODO 페이지렌더링 작성할것
 	console.log("404 error");
 	res.status(404).send("Wrong Approach");
 });

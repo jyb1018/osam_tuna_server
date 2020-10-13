@@ -1,82 +1,156 @@
 var express = require("express");
 var app = express();
 var router = express.Router();
-var Account = require("../models/account.js");
+var account = require("../models/account.js");
 
 
 
-
-//로그인 체크 페이지
+//미검증
+//로그인
+//return : userName, userRank
 router.route("/login").post(function(req,res) {
 	console.log("POSTED userId , userPW");
 
-	if(canlogin(req.body.userId, req.body.userPW))
-	{
+	if(account.canLogin(req.body.userId, req.body.userPW)) {
+		var userInfo = account.getuserInfo(req.body.userId);
+		//TODO 추후 수정 해야함?
+		req.session.user = userInfo;
+		req.session.user.authroized = true;
 		
-	}
-	else
-	{
-		res.send({"status" : "failed"});
-	}
+		res.json({
+			userName: userInfo.userName,
+			userRank: userInfo.userRank
+		}); 
+	} else
+		res.status(400).json({
+			error: "Wrong Id or Password",
+			code: 0
+		});
+	
 
 		
 
 });
 
-router.route("/login").get(function(req,res) {
-		
 
-});
 
 router.route("/logout").post(function(req, res) {
-	if(req.query.userId != "바ㄲㅝ야함.")
-		;
 	
+	if(!req.session.user)
+		res.status(400).json({
+			error: "Wrong Approach : Logout while not logined",
+			code : -1
+		});
+	else {
+		var userInfo = req.session.userInfo;
+		req.session.destroy(function(err) {
+			if(err) {
+				console.log("[Error] logout didn't complete successfully");
+				return;
+			}
+			console.log("userid "+userInfo.userId+"logout successfully");
+			res.redirect("/auth");
+		}); 	
+	}
 });
 
+//미검증
+//회원가입
 router.route("/signup").post(function(req, res) {
 	
-	//정규표현식으로 사용한 아이디 유효성 검사
-	let usernameRegex = /^[a-z0-9]+&/;
+	//ㅇㅖ시, 나중에 지우면 댐
+	var userInfo_example = {
+		userId: "string",
+		userPW: "string",
+		userName: "string",
+		userTel: "string",
+		userRank: "string",
+		userUnit: "string"
+	};
 	
-	if(!usernameRegex.test(req.body.userId)) {
+
+
+   // 아이디 유효성 검사
+	if(validation.userIdValid(userInfo.userId)) {
 		return res.status(400).json({
-			error: "Bad username",
+			error: "Bad userId",
 			code: 1
 		});
 	}
 	
 	//비밀번호 유효성 검사
-	if(req.body.password.length < 4 || typeof req.body.password !== "string")
-		return res.status(400).json({
-			error: "Bad password",
+    if(validation.userPWValid(userInfo.userPW) {
+    	return res.status(400).json({
+			error: "Bad userPW",
 			code: 2
 		});
 	}
-
-	//TODO findOne 함수 구현 필요
-	Account.findOne(userId, function(err, exists) {
-		if(err) throw err;
-		if(!exists)
-			return res.status(401).json({
-				error : "Username already exists",
-				code : 3
-			});
-		
-		hasher({password:req.body.pssword}, function(err, pass, salt, hash) {
-			let account = new Account({
-				userId: req.body.userId,
-				userPW: hash,
-				salt: sat
-			});
-			account.save( function(err) {
-				if(err) throw err;
-				return res.json({success:true});
-			});
+    
+	//사용자 이름 유효성 검사
+    if(validation.userNameValid(userInfo.userName) {
+    	return res.status(400).json({
+			error: "Bad userName",
+			code: 3
 		});
-		
-	});
+	}
+
+   	//사용자 ㄱㅖ급 유효성 검사
+    if(validation.userRankValid(userInfo.userRank) {
+    	return res.status(400).json({
+			error: "Bad userRank",
+			code: 4
+		});
+	}
+       
+   	//사용자 전화번호 유효성 검사
+    if(validation.userTelValid(userInfo.userTel) {
+    	return res.status(400).json({
+			error: "Bad userTel",
+			code: 5
+		});
+	}
+
+	//사용자 소속 유효성 검사
+    if(validation.userPWValid(userInfo.userPW) {
+    	return res.status(400).json({
+			error: "Bad userUnit",
+			code: 6
+		});
+	}
+    
+     
+
+	if(!account.isIdExists(req.body.userId))
+		hasher({password:req.body.userPW}, function(err, pass, salt, hash) {
+			var userInfo = {
+				userId = req.body.userId,
+				userPW = pass,
+				userName = req.body.userName,
+				userTel = req.body.userTel,
+				userRank = req.body.userRank,
+				userUnit = req.body.userUnit
+			}
+			account.signUp(userInfo);
+			res.json({success:true}); 
+		});
+	else
+		res.status(400).json({
+			error: "Id already Exists",
+			code: 10
+		});
 });
+
+
+//미검증
+//userInfo pw제외 send
+router.route("/info").post(function(req,res) {
+	var userInfo = account.getUserInfo(req.body.userId);
+	if(!userInfo)
+		res.status(400).json({success:false});
+	
+	userInfo.userPW = undefined;
+	res.json(userInfo);	
+});	
 
 module.exports = router;
 
