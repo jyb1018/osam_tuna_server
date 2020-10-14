@@ -18,7 +18,7 @@ export function userTelValid(value){
 export function userRankValid(value){
 	return(/^[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]{2}$/.test(value));
 }
-export function userNameVaild(value){
+export function userNameValid(value){
 	return(/^[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]{2,10}$/.test(value));
 }
 export function userPWValid(value){
