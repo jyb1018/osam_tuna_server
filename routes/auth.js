@@ -1,163 +1,177 @@
 import express from "express";
-import {canLogin, getuserInfo, isIdExists, signUp, getAll} from "../models/account.js";
 import {userIdValid, userPWValid, userNameValid, userRankValid, userTelValid, userUnitValid} from "../utils/validation.js";
 import bkfd2Password from 'pbkdf2-password';
-import sqlSetting from '../config/sqlSetting.js';
-import mysql from 'mysql';
-const connection = mysql.createConnection(sqlSetting);
-connection.connect(function(err) {
-	if(err) console.error('mysql connection error : ' + err);
-	else console.log('mysql is connected successfully!');
-});
+import mysql from 'mysql2/promise';
+import {getConnection, getUserInfo,getAllUserInfo, signUp, isIdExists, login, getSaltInfo} from '../db/account.js';
+
 const hasher = bkfd2Password();
+const router = express.Router();
 
-var app = express();
-var router = express.Router();
+async function checkIdAndGetPWSalt (req,res,next) {
+	let {userId} = req.body;
+	try{
+		let salt = await getSaltInfo(userId);
+		req.body.userPWSalt = salt.data;
+		next();
+	} catch(err){
+		res.status(400).json({success:false,err:err, type:err.type}); 
+	}
+}
 
-
-
-//미검증
-//로그인
-//return : userName, userRank
-router.route("/login").post(function(req,res) {
-	console.log("POSTED userId , userPW");
-
-	if(canLogin(req.body.userId, req.body.userPW)) {
-		var userInfo = getuserInfo(req.body.userId);
-		//TODO 추후 수정 해야함?
-		req.session.user = userInfo;
-		req.session.user.authroized = true;
-		
-		res.json({
-			userName: userInfo.userName,
-			userRank: userInfo.userRank
-		}); 
-	} else
-		res.status(400).json({
-			error: "Wrong Id or Password",
-			code: 0
-		});
+router.route("/login").post(checkIdAndGetPWSalt, async(req,res)=>{
+	let {userId, userPW, userPWSalt} = req.body;
+	hasher({password:userPW, salt:userPWSalt}, async function(err, pass, salt, hash) {
+		let loginInfo =  {
+			userId: userId,
+			userPWSalt : salt,
+			userPWHash : hash,
+		};
+		try{
+			let userInfo = await login(loginInfo);
+			req.session.isLogin = true;
+			req.session.userInfo = userInfo;
+			res.status(200).json({success:true, data:userInfo}); 
+		} catch(err){
+			res.status(400).json({success:false,err:err, type:err.type}); 
+		}
+	})
 	
 });
 
-router.route("/test").get( async (req,res) =>{
-	let temp = await isIdExists('12-211');
-	console.log(temp)
-	res.status(200).json({
-		data: temp
-	});
-});
 
 
 
-router.route("/logout").post(function(req, res) {
-	
-	if(!req.session.user)
+router.route("/logout").post( async (req, res)=> {
+	if(!req.session.isLogin)
 		res.status(400).json({
-			error: "Wrong Approach : Logout while not logined",
-			code : -1
+			type: "Wrong Approach : Logout while not logined",
+			where:'/auth/logout - route',
+			success: false,
 		});
 	else {
-		var userInfo = req.session.userInfo;
+		let userInfo = req.session.userInfo;
 		req.session.destroy(function(err) {
 			if(err) {
-				console.log("[Error] logout didn't complete successfully");
-				return;
+				res.status(400).json({
+					type: "Logout failed",
+					where:'/auth/logout - route',
+					success: false,
+				});
+			} else {
+				res.status(200).json({
+					success: true,
+				});
 			}
-			console.log("userid "+userInfo.userId+"logout successfully");
-			res.redirect("/auth");
 		}); 	
 	}
 });
 
 
-function validAll (req, res, next){
+async function validAll (req, res, next){
 	let userInfo = {...req.body.userInfo};
+	// 여기 코드 고치고 싶은데 ㅎㅎ; 어케할까
 	if(!userIdValid(userInfo.userId)) {
 		return res.status(400).json({
 			type: "Bad userId",
-			code: 1
+			where:'validAll',
+			success: false,
 		});
 	}
 	else if(!userPWValid(userInfo.userPW)) {
 		return res.status(400).json({
 			type: "Bad userPW",
-			code: 2
+			where:'validAll',
+			success: false,
 		});
 	}
 	else if(!userNameValid(userInfo.userName)) {
 		return res.status(400).json({
 			type: "Bad userName",
-			code: 3
+			where:' validAll',
+			success: false,
 		});
 	}
 	else if(!userRankValid(userInfo.userRank)) {
 		return res.status(400).json({
 			type: "Bad userRank",
-			code: 4
+			where:'validAll',
+			success: false,
 		});
 	}
 	else if(!userTelValid(userInfo.userTel)) {
 		return res.status(400).json({
 			type: "Bad userTel",
-			code: 5
+			where:'validAll',
+			success: false,
 		});
 	}
 	else if(!userPWValid(userInfo.userPW)) {
 		return res.status(400).json({
 			type: "Bad userUnit",
-			code: 6
+			where:'validAll',
+			success: false,
 		});
 	}
-	connection.query("SELECT * from account where userId="+userInfo.userId, function(err, results, fields) {
-		if(err)
-			res.status(400).json({
-				type: "err",
-				code: 10
-			});
-		if(results.length === 0) next();
-		else {
-			res.status(400).json({
-				type: "Id Already Exist",
-				code: 10
-			});
-		}
-	}); 
+	else{
+		next();
+	}
 }
 
-router.route("/signup").post(validAll,(req, res)=> {
+async function isIdExist (req,res,next) {
+	let userId = req.body.userInfo.userId;
+	try{
+		let isId = await isIdExists(userId);
+		if(isId.data)
+			return res.status(400).json({success:false,err:{}, type:"id already exists", where:'isIdExist'});
+		else 
+			next();
+		 
+	} catch(err){
+		return res.status(400).json({success:false,err:err, type:err.type, where:'isIdExist'}); 
+	}
+}
+
+router.route("/signup").post(validAll,isIdExist,(req, res)=> {
 	let tempInfo = {...req.body.userInfo};
 	hasher({password:tempInfo.userPW}, async function(err, pass, salt, hash) {
+		
 		delete tempInfo['userPW'];
 		let userInfo =  {
 			...tempInfo,
 			userPWSalt : salt,
 			userPWHash : hash,
+			isWorker: tempInfo.isWorker ? 'TRUE' : 'FALSE',
 		};
-		let tf = userInfo.isWorker ? 'TRUE':'FALSE';
-		let values = `values('${userInfo.userId}','${userInfo.userName}','${userInfo.userTel}','${userInfo.userUnit}','${userInfo.userRank}','${userInfo.userPWHash}','${userInfo.userPWSalt}',${tf})`
-		connection.query("INSERT INTO account "+values+";", function(err, results, fields)	{
-			if(err)
-				res.json({success:false, error: err, type: "sql error", code: 11});
-			else {
-				res.json({success:true});
-			}
-			
-		})
+		
+		try{
+			await signUp(userInfo)
+			res.status(200).json({success:true}); 
+		} catch(err){
+			res.status(400).json({success:false,err:err, type:err.type}); 
+		}
+		
+		
 	})
 });
 
-
-//미검증
-//userInfo pw제외 send
-router.route("/info").post(function(req,res) {
-	var userInfo = getUserInfo(req.body.userId);
-	if(!userInfo)
-		res.status(400).json({success:false});
-	
-	userInfo.userPW = undefined;
-	res.json(userInfo);	
+router.route("/info").post( async (req,res)=> {
+	try{
+		let userInfo = await getUserInfo(req.body.userId);
+		res.status(200).json({success:true, data: userInfo}); 
+	} catch(err){
+		res.status(400).json({success:false,err:err, type:err.type}); 
+	}
 });	
+
+router.route("/test").get( async (req,res) =>{
+	try{
+		let temp = await getAllUserInfo();
+		res.status(200).json({success:true, data: temp}); 
+	} catch(err){
+		res.status(400).json({success:false,err:err, type:err.type}); 
+	}
+});
+
 
 export default router;
 

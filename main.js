@@ -6,24 +6,14 @@ import expressSession from"express-session";
 import cookieParser from"cookie-parser";
 import bodyParser from"body-parser";
 import bkfd2Password from 'pbkdf2-password';
- 
+import expressSessionSetting from './config/expressSessionSetting.js';
 const hasher = bkfd2Password();
 const app = express();
 const router = express.Router();
 app.set("port",process.env.PORT||"8080");
 app.set("hostname", "127.0.0.1");
 
-var mil_num;
-var mil_class;
-var name;
-var callerid;
-var password;
-
-app.use(expressSession({
-	secret: "key",
-	resave: true,
-	saveUninitialized: true
-}));
+app.use(expressSession(expressSessionSetting));
 app.use(bodyParser.json());
 app.use("/", router);
 app.use("/auth", auth);
